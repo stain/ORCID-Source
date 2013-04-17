@@ -40,10 +40,14 @@ import org.orcid.api.common.validation.ValidOrcidMessage;
 import org.orcid.api.t2.server.delegator.T2OrcidApiServiceDelegator;
 import org.orcid.core.manager.OrcidProfileManager;
 import org.orcid.core.manager.OrcidSearchManager;
+import org.orcid.core.manager.ProfileEntityManager;
 import org.orcid.core.manager.ValidationManager;
 import org.orcid.core.security.visibility.aop.AccessControl;
 import org.orcid.core.security.visibility.aop.VisibilityControl;
 import org.orcid.jaxb.model.message.CreationMethod;
+import org.orcid.jaxb.model.message.ExternalIdOrcid;
+import org.orcid.jaxb.model.message.ExternalIdentifier;
+import org.orcid.jaxb.model.message.ExternalIdentifiers;
 import org.orcid.jaxb.model.message.OrcidHistory;
 import org.orcid.jaxb.model.message.OrcidMessage;
 import org.orcid.jaxb.model.message.OrcidProfile;
@@ -69,6 +73,8 @@ import org.springframework.security.oauth2.provider.AuthorizationRequest;
 import org.springframework.security.oauth2.provider.OAuth2Authentication;
 import org.springframework.stereotype.Component;
 
+import org.hibernate.exception.ConstraintViolationException;
+
 /**
  * 2011-2012 ORCID
  * <p/>
@@ -90,6 +96,9 @@ public class T2OrcidApiServiceDelegatorImpl implements T2OrcidApiServiceDelegato
 
     @Resource
     private ValidationManager validationManager;
+
+    @Resource
+    private ProfileEntityManager profileEntityManager;
 
     @Resource
     private WebhookDao webhookDao;
@@ -221,6 +230,9 @@ public class T2OrcidApiServiceDelegatorImpl implements T2OrcidApiServiceDelegato
             orcidProfile = orcidProfileManager.createOrcidProfileAndNotify(orcidProfile);
             return getCreatedResponse(uriInfo, PROFILE_GET_PATH, orcidProfile);
         } catch (DataAccessException e) {
+            if (e.getCause() != null && ConstraintViolationException.class.isAssignableFrom(e.getCause().getClass())) {
+                throw new OrcidBadRequestException("User with this email already exist.");
+            }
             throw new OrcidBadRequestException("Cannot create ORCID", e);
         }
     }
@@ -294,6 +306,32 @@ public class T2OrcidApiServiceDelegatorImpl implements T2OrcidApiServiceDelegato
     public Response addExternalIdentifiers(UriInfo uriInfo, String orcid, OrcidMessage orcidMessage) {
         OrcidProfile orcidProfile = orcidMessage.getOrcidProfile();
         try {
+
+            ExternalIdentifiers updatedExternalIdentifiers = orcidProfile.getOrcidBio().getExternalIdentifiers();
+
+            // Get the client profile information
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String clientId = null;
+            if (OAuth2Authentication.class.isAssignableFrom(authentication.getClass())) {
+                AuthorizationRequest authorizationRequest = ((OAuth2Authentication) authentication).getAuthorizationRequest();
+                clientId = authorizationRequest.getClientId();
+            }
+
+            for (ExternalIdentifier ei : updatedExternalIdentifiers.getExternalIdentifier()) {
+                // Set the client profile to each external identifier
+                if (ei.getExternalIdOrcid() == null) {
+                    ExternalIdOrcid eio = new ExternalIdOrcid(clientId);
+                    ei.setExternalIdOrcid(eio);
+                } else {
+                    //Check if the provided external orcid exists
+                    ExternalIdOrcid eio = ei.getExternalIdOrcid();
+
+                    if (StringUtils.isBlank(eio.getValue()) || !profileEntityManager.orcidExists(eio.getValue())) {
+                        throw new OrcidNotFoundException("Cannot find external ORCID");
+                    }
+                }
+            }
+
             orcidProfile = orcidProfileManager.addExternalIdentifiers(orcidProfile);
             return getOrcidMessageResponse(orcidProfile, orcid);
         } catch (DataAccessException e) {
@@ -416,7 +454,7 @@ public class T2OrcidApiServiceDelegatorImpl implements T2OrcidApiServiceDelegato
         } catch (URISyntaxException e) {
             throw new OrcidBadRequestException(String.format("Webhook uri:%s is syntactically incorrect", webhookUri));
         }
-        
+
         ProfileEntity profile = profileDao.find(orcid);
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         ProfileEntity clientProfile = null;
@@ -475,7 +513,7 @@ public class T2OrcidApiServiceDelegatorImpl implements T2OrcidApiServiceDelegato
                     clientId = authorizationRequest.getClientId();
                 }
                 //Check if user can unregister this webhook
-                if(webhook.getClientDetails().getId().equals(clientId)){
+                if (webhook.getClientDetails().getId().equals(clientId)) {
                     webhookDao.remove(webhookPk);
                     webhookDao.flush();
                     return Response.noContent().build();

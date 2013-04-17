@@ -31,6 +31,7 @@ import org.orcid.jaxb.model.message.Biography;
 import org.orcid.jaxb.model.message.ContactDetails;
 import org.orcid.jaxb.model.message.Country;
 import org.orcid.jaxb.model.message.CreditName;
+import org.orcid.jaxb.model.message.ExternalIdentifier;
 import org.orcid.jaxb.model.message.ExternalIdentifiers;
 import org.orcid.jaxb.model.message.FamilyName;
 import org.orcid.jaxb.model.message.GivenNames;
@@ -73,11 +74,6 @@ public class ChangePersonalInfoForm {
     private ExternalIdentifiers externalIdentifiers;
     private ResearcherUrls savedResearcherUrls;
 
-    private String email;
-    private String emailVisibility;
-
-    private boolean emailVerified;
-
     private AlternativeEmails savedAlternativeEmails;
 
     public ChangePersonalInfoForm() {
@@ -99,9 +95,6 @@ public class ChangePersonalInfoForm {
         setSavedResearcherUrls(orcidProfile.getOrcidBio().getResearcherUrls());
         setWebsiteUrlVisibility(orcidProfile.getOrcidBio().getResearcherUrls().getVisibility().value());
         setExternalIdentifiers(orcidProfile.getOrcidBio().getExternalIdentifiers());
-        setEmail(orcidProfile.getOrcidBio().getContactDetails().retrievePrimaryEmail().getValue());
-        setEmailVisibility(orcidProfile.getOrcidBio().getContactDetails().retrievePrimaryEmail().getVisibility().value());
-        setEmailVerified(orcidProfile.getOrcidBio().getContactDetails().retrievePrimaryEmail().isVerified());
     }
 
     private void initNullSafeValues(OrcidProfile currentOrcidProfile) {
@@ -214,24 +207,6 @@ public class ChangePersonalInfoForm {
 
     public void setCreditName(String creditName) {
         this.creditName = creditName;
-    }
-
-    @NotBlank(message = "Please enter your e-mail address.")
-    @Email(message = "Invalid email address.")
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public String getEmailVisibility() {
-        return emailVisibility;
-    }
-
-    public void setEmailVisibility(String emailVisibility) {
-        this.emailVisibility = emailVisibility;
     }
 
     public String getLastName() {
@@ -363,14 +338,6 @@ public class ChangePersonalInfoForm {
         this.externalIdentifiers = externalIdentifiers;
     }
 
-    public boolean getEmailVerified() {
-        return emailVerified;
-    }
-
-    private void setEmailVerified(boolean emailVerified) {
-        this.emailVerified = emailVerified;
-    }
-
     public void mergeOrcidBioDetails(OrcidProfile orcidProfile) {
         initNullSafeValues(orcidProfile);
         orcidProfile.getOrcidBio().getPersonalDetails().getCreditName().setContent(creditName);
@@ -386,8 +353,6 @@ public class ChangePersonalInfoForm {
         orcidProfile.getOrcidBio().getBiography().setContent(biography);
         orcidProfile.getOrcidBio().setResearcherUrls(persistResearcherInfo());
         orcidProfile.getOrcidBio().getResearcherUrls().setVisibility(StringUtils.isBlank(websiteUrlVisibility) ? null : Visibility.fromValue(websiteUrlVisibility));
-        orcidProfile.getOrcidBio().getContactDetails().retrievePrimaryEmail().setValue(email);
-        orcidProfile.getOrcidBio().getContactDetails().retrievePrimaryEmail().setVisibility(Visibility.fromValue(emailVisibility));
         orcidProfile.getOrcidBio().setExternalIdentifiers(externalIdentifiers);
     }
 

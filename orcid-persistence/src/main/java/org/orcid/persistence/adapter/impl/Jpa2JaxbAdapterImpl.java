@@ -25,6 +25,7 @@ import org.orcid.jaxb.model.message.*;
 import org.orcid.persistence.adapter.Jpa2JaxbAdapter;
 import org.orcid.persistence.jpa.entities.*;
 import org.orcid.utils.DateUtils;
+import org.springframework.beans.factory.annotation.Value;
 
 import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
@@ -53,6 +54,9 @@ import java.util.SortedSet;
 
 public class Jpa2JaxbAdapterImpl implements Jpa2JaxbAdapter {
 
+    @Value("${org.orcid.core.baseUri:http://orcid.org}")
+    private String baseUri = null;
+
     private DatatypeFactory datatypeFactory = null;
 
     public Jpa2JaxbAdapterImpl() {
@@ -73,7 +77,8 @@ public class Jpa2JaxbAdapterImpl implements Jpa2JaxbAdapter {
         OrcidProfile profile = new OrcidProfile();
         OrcidType type = profileEntity.getOrcidType();
         profile.setOrcid(profileEntity.getId());
-        profile.setOrcidId("http://orcid.org/" + profileEntity.getId());
+        // we may just want an other property entry instead of baseUri
+        profile.setOrcidId(baseUri.replace("https", "http") + "/" + profileEntity.getId());
         profile.setOrcidActivities(getOrcidActivities(profileEntity));
         profile.setOrcidBio(getOrcidBio(profileEntity));
         profile.setOrcidHistory(getOrcidHistory(profileEntity));
@@ -462,7 +467,9 @@ public class Jpa2JaxbAdapterImpl implements Jpa2JaxbAdapter {
             for (ExternalIdentifierEntity externalIdentifierEntity : externalIdentifierEntities) {
                 ExternalIdentifier externalIdentifier = new ExternalIdentifier();
                 ProfileEntity externalIdEntity = externalIdentifierEntity.getExternalIdOrcid();
+                ProfileEntity orcidProfile = externalIdentifierEntity.getOwner();
                 externalIdentifier.setExternalIdOrcid(externalIdEntity != null ? new ExternalIdOrcid(externalIdEntity.getId()) : null);
+                externalIdentifier.setOrcid(orcidProfile != null ? new Orcid(orcidProfile.getId()) : null);
                 externalIdentifier.setExternalIdReference(StringUtils.isNotBlank(externalIdentifierEntity.getExternalIdReference()) ? new ExternalIdReference(
                         externalIdentifierEntity.getExternalIdReference()) : null);
                 externalIdentifier.setExternalIdCommonName(StringUtils.isNotBlank(externalIdentifierEntity.getExternalIdCommonName()) ? new ExternalIdCommonName(
