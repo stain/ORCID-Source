@@ -132,7 +132,6 @@ public class ManageProfileControllerTest extends BaseControllerTest {
         ModelAndView mav = controller.manageProfile("ManagePersonalInfo");
         Map<String, Object> model = mav.getModel();
         assertEquals("manage", mav.getViewName());
-        assertNotNull(model.get("managePasswordOptionsForm"));
         assertNotNull(model.get("profile"));
         String activeTab = (String) model.get("activeTab");
         assertNotNull(activeTab);
@@ -175,7 +174,6 @@ public class ManageProfileControllerTest extends BaseControllerTest {
         currentAffiliationsForm = (CurrentAffiliationsForm) model.get("currentAffiliationsForm");
 
         assertEquals("manage", mav.getViewName());
-        assertNotNull(passwordOptionsForm);
         assertNotNull(profile);
         assertEquals("4444-4444-4444-4446", profile.getOrcid().getValue());
         assertEquals("affiliations-tab", activeTab);

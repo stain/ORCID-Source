@@ -27,21 +27,6 @@
 		</div>
 		<div class="span9">
 			<h1 id="account-settings">${springMacroRequestContext.getMessage("manage.account_settings")}</h1>
-			<#assign open = "" />
-			<@spring.bind "managePasswordOptionsForm.*" />
-			<#if spring.status.error>
-				<#assign open="password" />
-				<div class="alert alert-error">
-				    <ul class="validationerrors">
-				        <#list spring.status.errorMessages?sort as error> <li>${error}</li> </#list>
-				    </ul>
-				</div>
-			</#if>
-			<#if passwordOptionsSaved?? && passwordOptionsSaved>
-				<div class="alert alert-success">
-				    <strong><@spring.message "orcid.frontend.web.passwordoptions_changed"/></strong>
-				</div>
-			</#if>
 			
 			<table class="table table-bordered settings-table" id="ng-app" ng-app="orcidApp" ng-controller="EditTableCtrl" style="margin: 0px, padding: 0px;">
 				<tbody>

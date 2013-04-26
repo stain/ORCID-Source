@@ -41,7 +41,6 @@ import org.orcid.frontend.web.forms.ChangePasswordForm;
 import org.orcid.frontend.web.forms.ChangePersonalInfoForm;
 import org.orcid.frontend.web.forms.ChangeSecurityQuestionForm;
 import org.orcid.frontend.web.forms.CurrentAffiliationsForm;
-import org.orcid.frontend.web.forms.ManagePasswordOptionsForm;
 import org.orcid.frontend.web.forms.PastInstitutionsForm;
 import org.orcid.frontend.web.forms.PreferencesForm;
 import org.orcid.frontend.web.forms.SearchForDelegatesForm;
@@ -225,41 +224,6 @@ public class ManageProfileController extends BaseWorkspaceController {
         return affiliationsView;
     }
 
-    @RequestMapping(value = "/manage-password-info", method = RequestMethod.GET)
-    public ModelAndView viewPasswordInfo() {
-        ModelAndView defaultView = rebuildManageView("password-tab");
-        ManagePasswordOptionsForm passwordOptionForUser = populateManagePasswordFormFromUserInfo();
-        defaultView.addObject("passwordOptionsForm", passwordOptionForUser);
-        return defaultView;
-    }
-
-    @RequestMapping(value = "/manage-password-info", method = RequestMethod.POST)
-    public ModelAndView updatePasswordInformation(@ModelAttribute @Valid ManagePasswordOptionsForm passwordOptionsForm, BindingResult bindingResult) {
-
-        // if errors - redirect to the populate view - bind where we can see
-        // errors
-        if (bindingResult.hasErrors()) {
-            ModelAndView erroredView = rebuildManageView("password-tab");
-            erroredView.addAllObjects(bindingResult.getModel());
-            return erroredView;
-        }
-
-        // if not retrieve the user credentials, and set the new security
-        // details
-        OrcidProfile profile = getCurrentUser().getEffectiveProfile();
-        profile.setPassword(passwordOptionsForm.getPassword());
-        profile.setVerificationCode(passwordOptionsForm.getVerificationNumber());
-        profile.setSecurityQuestionAnswer(passwordOptionsForm.getSecurityQuestionAnswer());
-        profile.getOrcidInternal().getSecurityDetails().setSecurityQuestionId(new SecurityQuestionId(passwordOptionsForm.getSecurityQuestionId()));
-
-        orcidProfileManager.updatePasswordInformation(profile);
-        // return the view as if an HTTP get now that the info has persisted ok
-        ModelAndView mav = rebuildManageView("password-tab");
-        mav.addObject("activeTab", "password-tab");
-        mav.addObject("passwordOptionsSaved", true);
-        return mav;
-    }
-
     @RequestMapping(value = "/search-for-delegates", method = RequestMethod.GET)
     public ModelAndView viewSearchForDelegates() {
         ModelAndView mav = new ModelAndView("search_for_delegates");
@@ -396,7 +360,6 @@ public class ManageProfileController extends BaseWorkspaceController {
         ModelAndView mav = new ModelAndView("manage");
         mav.addObject("showPrivacy", true);
         OrcidProfile profile = getCurrentUserAndRefreshIfNecessary().getEffectiveProfile();
-        mav.addObject("managePasswordOptionsForm", populateManagePasswordFormFromUserInfo());
         mav.addObject("preferencesForm", new PreferencesForm(profile));
         mav.addObject("profile", profile);
         mav.addObject("activeTab", activeTab);
@@ -405,31 +368,6 @@ public class ManageProfileController extends BaseWorkspaceController {
         mav.addObject("pastInstitutionsForm", new PastInstitutionsForm(profile));
         mav.addObject("currentAffiliationsForm", currentAffiliationsForm);
         return mav;
-    }
-
-    private ManagePasswordOptionsForm populateManagePasswordFormFromUserInfo() {
-        OrcidProfileUserDetails currentUserDetails = getCurrentUser();
-        OrcidProfile profile = currentUserDetails.getEffectiveProfile();
-
-        // TODO - placeholder just to test the retrieve etc..replace with only
-        // fields that we will populate
-        // password fields are never populated
-        OrcidProfile unecryptedProfile = orcidProfileManager.retrieveOrcidProfile(profile.getOrcid().getValue());
-        ManagePasswordOptionsForm managePasswordOptionsForm = new ManagePasswordOptionsForm();
-        managePasswordOptionsForm.setVerificationNumber(unecryptedProfile.getVerificationCode());
-        managePasswordOptionsForm.setSecurityQuestionAnswer(unecryptedProfile.getSecurityQuestionAnswer());
-        Integer securityQuestionId = null;
-        SecurityDetails securityDetails = unecryptedProfile.getOrcidInternal().getSecurityDetails();
-        // TODO - confirm that security details aren't null and that we can
-        // change schema to be an int for security
-        // questions field
-        if (securityDetails != null) {
-            securityQuestionId = securityDetails.getSecurityQuestionId() != null ? new Integer((int) securityDetails.getSecurityQuestionId().getValue()) : null;
-        }
-
-        managePasswordOptionsForm.setSecurityQuestionId(securityQuestionId);
-
-        return managePasswordOptionsForm;
     }
 
     @ModelAttribute("changeNotificationsMap")
@@ -473,14 +411,6 @@ public class ManageProfileController extends BaseWorkspaceController {
         accountSettings.addObject("sendOrcidNews", sendOrcidNews);
         accountSettings.addObject("profile", profile);
         return accountSettings;
-    }
-
-    @RequestMapping(value = { "/password", "/change-password" }, method = RequestMethod.GET)
-    public ModelAndView viewChangePassword() {
-        ChangePasswordForm changePasswordForm = new ChangePasswordForm();
-        ModelAndView changePasswordView = new ModelAndView("change_password");
-        changePasswordView.addObject(changePasswordForm);
-        return changePasswordView;
     }
 
     @RequestMapping(value = { "/security-question", "/change-security-question" }, method = RequestMethod.GET)
