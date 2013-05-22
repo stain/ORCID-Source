@@ -22,12 +22,9 @@ import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 import javax.annotation.Resource;
-import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.Response;
 
 import org.junit.After;
@@ -43,12 +40,8 @@ import org.orcid.jaxb.model.message.GivenNames;
 import org.orcid.jaxb.model.message.OrcidBio;
 import org.orcid.jaxb.model.message.OrcidMessage;
 import org.orcid.jaxb.model.message.OrcidProfile;
-import org.orcid.jaxb.model.message.OrcidSearchResult;
-import org.orcid.jaxb.model.message.OrcidSearchResults;
 import org.orcid.jaxb.model.message.OtherNames;
 import org.orcid.jaxb.model.message.PersonalDetails;
-
-import com.sun.jersey.core.util.MultivaluedMapImpl;
 
 public class T1OrcidApiServiceImplRDFTest {
 
@@ -102,17 +95,6 @@ public class T1OrcidApiServiceImplRDFTest {
     }
 
     @Test
-    public void testCounterUnaffectedByViewStatus() {
-        assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
-        assertTrue(T1OrcidApiServiceImpl.T1_GET_REQUESTS.count() == 0);
-        Response response = t1OrcidApiService.viewStatusText();
-        assertEquals(200, response.getStatus());
-        assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
-        assertTrue(T1OrcidApiServiceImpl.T1_GET_REQUESTS.count() == 0);
-
-    }
-
-    @Test
     public void testViewBioDetailsRdf() {
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
         assertTrue(T1OrcidApiServiceImpl.T1_GET_REQUESTS.count() == 0);
@@ -162,36 +144,4 @@ public class T1OrcidApiServiceImplRDFTest {
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
     }
     */
-
-    private MultivaluedMap<String, String> queryParams() {
-        return new MultivaluedMapImpl();
-    }
-
-    private Response orcidWithMultipleResults() {
-
-        OrcidMessage orcidMessage = new OrcidMessage();
-        OrcidProfile orcidProfile1 = new OrcidProfile();
-        OrcidProfile orcidProfile2 = new OrcidProfile();
-        OrcidProfile orcidProfile3 = new OrcidProfile();
-
-        OrcidSearchResult orcidSearchResult1 = new OrcidSearchResult();
-        OrcidSearchResult orcidSearchResult2 = new OrcidSearchResult();
-        OrcidSearchResult orcidSearchResult3 = new OrcidSearchResult();
-
-        orcidSearchResult1.setOrcidProfile(orcidProfile1);
-        orcidSearchResult2.setOrcidProfile(orcidProfile2);
-        orcidSearchResult3.setOrcidProfile(orcidProfile3);
-
-        List<OrcidSearchResult> searchResults = new ArrayList<OrcidSearchResult>();
-        searchResults.add(orcidSearchResult1);
-        searchResults.add(orcidSearchResult2);
-        searchResults.add(orcidSearchResult3);
-
-        OrcidSearchResults orcidSearchResults = new OrcidSearchResults();
-        orcidSearchResults.getOrcidSearchResult().addAll(searchResults);
-        orcidMessage.setOrcidSearchResults(orcidSearchResults);
-        return Response.ok(orcidMessage).build();
-
-    }
-
 }
