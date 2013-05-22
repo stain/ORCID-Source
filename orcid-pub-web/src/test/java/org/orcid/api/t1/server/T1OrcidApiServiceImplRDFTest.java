@@ -21,6 +21,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.orcid.api.common.OrcidApiConstants.*;
 
 import java.util.Arrays;
 
@@ -64,7 +65,7 @@ public class T1OrcidApiServiceImplRDFTest {
     private Response fakeBio() {
         OrcidMessage orcidMessage = new OrcidMessage();
         OrcidProfile orcidProfile1 = new OrcidProfile();
-        orcidProfile1.setOrcid("000-1337");
+        orcidProfile1.setOrcid("http://orcid.example.com/000-1337");
         orcidProfile1.setOrcidId("000-1337");
         OrcidBio bio = new OrcidBio();
         orcidProfile1.setOrcidBio(bio);
@@ -102,9 +103,15 @@ public class T1OrcidApiServiceImplRDFTest {
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
         Response response = t1OrcidApiService.viewBioDetailsRdf("orcid");
         assertEquals(200, response.getStatus());
-        System.out.println(response.getEntity());
+//        assertEquals(APPLICATION_RDFXML, response.getMetadata().g)
+        String str = response.getEntity().toString();
+//        System.out.println(str);
+        assertTrue(str.contains("http://orcid.example.com/000-1337"));
+        assertTrue(str.contains("foaf:fullname>John"));
+        assertTrue(str.contains("rdf:about"));
         assertTrue(T1OrcidApiServiceImpl.T1_GET_REQUESTS.count() == 1);
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
+        
     }
 
     /*
