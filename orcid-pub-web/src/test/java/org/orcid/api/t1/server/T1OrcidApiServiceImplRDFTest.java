@@ -113,53 +113,55 @@ public class T1OrcidApiServiceImplRDFTest {
     }
 
     @Test
-    public void testViewBioDetailsJson() {
+    public void testViewBioDetailsRdf() {
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
         assertTrue(T1OrcidApiServiceImpl.T1_GET_REQUESTS.count() == 0);
         when(mockServiceDelegator.findBioDetails(any(String.class))).thenReturn(fakeBio());
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
-        Response response = t1OrcidApiService.viewBioDetailsJson("orcid");
+        Response response = t1OrcidApiService.viewBioDetailsRdf("orcid");
         assertEquals(200, response.getStatus());
         System.out.println(response.getEntity());
         assertTrue(T1OrcidApiServiceImpl.T1_GET_REQUESTS.count() == 1);
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
     }
 
+    /*
     @Test
-    public void testViewExternalIdentifiersJson() {
+    public void testViewExternalIdentifiersRdf() {
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
         assertTrue(T1OrcidApiServiceImpl.T1_GET_REQUESTS.count() == 0);
         when(mockServiceDelegator.findExternalIdentifiers(any(String.class))).thenReturn(successResponse);
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
-        Response response = t1OrcidApiService.viewExternalIdentifiersJson("orcid");
+        Response response = t1OrcidApiService.viewExternalIdentifiersRdf("orcid");
         assertEquals(200, response.getStatus());
         assertTrue(T1OrcidApiServiceImpl.T1_GET_REQUESTS.count() == 1);
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
     }
 
     @Test
-    public void testViewFullDetailsJson() {
+    public void testViewFullDetailsRdf() {
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
         assertTrue(T1OrcidApiServiceImpl.T1_GET_REQUESTS.count() == 0);
         when(mockServiceDelegator.findFullDetails(any(String.class))).thenReturn(successResponse);
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
-        Response response = t1OrcidApiService.viewFullDetailsJson("orcid");
+        Response response = t1OrcidApiService.viewFullDetailsRdf("orcid");
         assertEquals(200, response.getStatus());
         assertTrue(T1OrcidApiServiceImpl.T1_GET_REQUESTS.count() == 1);
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
     }
 
     @Test
-    public void testViewWorksDetailsJson() {
+    public void testViewWorksDetailsRdf() {
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
         assertTrue(T1OrcidApiServiceImpl.T1_GET_REQUESTS.count() == 0);
         when(mockServiceDelegator.findWorksDetails(any(String.class))).thenReturn(successResponse);
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
-        Response response = t1OrcidApiService.viewWorksDetailsJson("orcid");
+        Response response = t1OrcidApiService.viewWorksDetailsRdf("orcid");
         assertEquals(200, response.getStatus());
         assertTrue(T1OrcidApiServiceImpl.T1_GET_REQUESTS.count() == 1);
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
     }
+    */
 
     private MultivaluedMap<String, String> queryParams() {
         return new MultivaluedMapImpl();
