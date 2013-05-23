@@ -17,10 +17,11 @@
 package org.orcid.api.rdf;
 
 import static org.orcid.api.common.OrcidApiConstants.APPLICATION_RDFXML;
+import static org.orcid.api.common.OrcidApiConstants.TEXT_N3;
+import static org.orcid.api.common.OrcidApiConstants.TEXT_TURTLE;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.StringWriter;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 
@@ -28,7 +29,6 @@ import javax.ws.rs.Produces;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedMap;
-import javax.ws.rs.core.Response;
 import javax.ws.rs.ext.MessageBodyWriter;
 import javax.ws.rs.ext.Provider;
 
@@ -43,13 +43,12 @@ import com.hp.hpl.jena.ontology.Ontology;
 import com.hp.hpl.jena.rdf.model.ModelFactory;
 
 /**
- * 2011-2013 ORCID
+ * 2013 ORCID
  * 
  * @author Stian Soiland-Reyes
- * @author Declan Newman (declan) Date: 02/03/2012
  */
 @Provider
-@Produces( { APPLICATION_RDFXML })
+@Produces( { APPLICATION_RDFXML, TEXT_TURTLE, TEXT_N3 })
 public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
     
     private static final String FOAF_0_1 = "http://xmlns.com/foaf/0.1/";
@@ -102,7 +101,7 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
      */
     @Override
     public long getSize(OrcidMessage message, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
-        return (message != null && message.toString() != null) ? message.toString().getBytes().length : -1;
+        return -1;
     }
 
     /**
@@ -170,6 +169,11 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
                 person.addProperty(familyName, personalDetails.getFamilyName().getContent());
             }
             
-            m.write(entityStream);
+            if (mediaType.toString().equals(APPLICATION_RDFXML)) {
+                m.write(entityStream); 
+            } else {
+                // Must be Turtle or N3 then?
+                m.write(entityStream, "N3");
+            }
     }
 }
