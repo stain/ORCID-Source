@@ -30,7 +30,6 @@ import static org.orcid.api.common.OrcidApiConstants.VND_ORCID_JSON;
 import static org.orcid.api.common.OrcidApiConstants.VND_ORCID_XML;
 import static org.orcid.api.common.OrcidApiConstants.WORKS_PATH;
 
-import java.io.StringWriter;
 import java.util.List;
 import java.util.Map;
 
@@ -47,16 +46,8 @@ import javax.ws.rs.core.UriInfo;
 import org.orcid.api.common.OrcidApiService;
 import org.orcid.api.common.delegator.OrcidApiServiceDelegator;
 import org.orcid.jaxb.model.message.OrcidMessage;
-import org.orcid.jaxb.model.message.OrcidProfile;
 import org.springframework.stereotype.Component;
 
-import com.hp.hpl.jena.ontology.AnnotationProperty;
-import com.hp.hpl.jena.ontology.DatatypeProperty;
-import com.hp.hpl.jena.ontology.Individual;
-import com.hp.hpl.jena.ontology.OntModel;
-import com.hp.hpl.jena.ontology.OntModelSpec;
-import com.hp.hpl.jena.ontology.Ontology;
-import com.hp.hpl.jena.rdf.model.ModelFactory;
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Counter;
 
@@ -69,7 +60,6 @@ import com.yammer.metrics.core.Counter;
 @Path("/")
 public class T1OrcidApiServiceImpl implements OrcidApiService<Response> {
 
-    private static final String FOAF_0_1 = "http://xmlns.com/foaf/0.1/";
     final static Counter T1_GET_REQUESTS = Metrics.newCounter(T1OrcidApiServiceImpl.class, "T1-GET-REQUESTS");
     final static Counter T1_SEARCH_REQUESTS = Metrics.newCounter(T1OrcidApiServiceImpl.class, "T1-SEARCH-REQUESTS");
 
@@ -148,36 +138,9 @@ public class T1OrcidApiServiceImpl implements OrcidApiService<Response> {
     @Path(BIO_PATH)
     public Response viewBioDetailsRdf(@PathParam("orcid") String orcid) {
         T1_GET_REQUESTS.inc();
-        Response xmlResp = serviceDelegator.findBioDetails(orcid);
-        return xmlToRdf(xmlResp, APPLICATION_RDFXML);
+        return serviceDelegator.findBioDetails(orcid);
     }
 
-    protected Response xmlToRdf(Response xmlResp, String mediaType) {
-        OrcidMessage xml = (OrcidMessage) xmlResp.getEntity();
-        
-        // Create RDF model
-        OntModel m = ModelFactory.createOntologyModel();
-        // TODO: Load FOAF locally, and cached
-        m.setDynamicImports(true);
-        OrcidProfile orcidProfile = xml.getOrcidProfile();
-        String profileUri = orcidProfile.getOrcid().getValue();
-        Ontology ont = m.createOntology(profileUri + "#");
-        ont.addImport(m.createResource(FOAF_0_1));
-        m.setNsPrefix("foaf", FOAF_0_1);
-        
-        Individual person = m.createIndividual(profileUri, m.getOntClass(FOAF_0_1 + "Person"));
-        
-//        AnnotationProperty foafName = m.getAnnotationProperty(FOAF_0_1 + "name");
-        DatatypeProperty foafName = m.getDatatypeProperty(FOAF_0_1 + "name");
-        person.addProperty(foafName, orcidProfile.getOrcidBio().getPersonalDetails().getCreditName().getContent());
-        
-        // TOOD: Do a stream to Response
-        StringWriter writer = new StringWriter();
-        m.write(writer);
-        
-        String rdf = writer.toString();
-        return Response.ok(rdf, mediaType).build();
-    }
 
     /**
      * GETs the RDF Turtle representation of the ORCID record containing only the
@@ -192,7 +155,7 @@ public class T1OrcidApiServiceImpl implements OrcidApiService<Response> {
     @Path(BIO_PATH)
     public Response viewBioDetailsTurtle(@PathParam("orcid") String orcid) {
         T1_GET_REQUESTS.inc();
-        return xmlToRdf(serviceDelegator.findBioDetails(orcid), TEXT_TURTLE);
+        return serviceDelegator.findBioDetails(orcid);
     }
 
     /**
