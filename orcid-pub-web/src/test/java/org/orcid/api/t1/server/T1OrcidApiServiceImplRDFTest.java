@@ -96,7 +96,6 @@ public class T1OrcidApiServiceImplRDFTest {
         T1OrcidApiServiceImpl.T1_SEARCH_RESULTS_FOUND.clear();
     }
 
-    @Ignore
     @Test
     public void testViewBioDetailsRdf() {
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
@@ -107,9 +106,9 @@ public class T1OrcidApiServiceImplRDFTest {
         assertEquals(200, response.getStatus());
 //        assertEquals(APPLICATION_RDFXML, response.getMetadata().g)
         String str = response.getEntity().toString();
-//        System.out.println(str);
+        System.out.println(str);
         assertTrue(str.contains("http://orcid.example.com/000-1337"));
-        assertTrue(str.contains("foaf:fullname>John"));
+        assertTrue(str.contains("foaf:name>John"));
         assertTrue(str.contains("rdf:about"));
         assertTrue(T1OrcidApiServiceImpl.T1_GET_REQUESTS.count() == 1);
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
