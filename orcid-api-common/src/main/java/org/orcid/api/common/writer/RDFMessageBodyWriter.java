@@ -34,6 +34,7 @@ import javax.ws.rs.ext.Provider;
 
 import org.orcid.jaxb.model.message.OrcidMessage;
 import org.orcid.jaxb.model.message.OrcidProfile;
+import org.orcid.jaxb.model.message.PersonalDetails;
 
 import com.hp.hpl.jena.ontology.DatatypeProperty;
 import com.hp.hpl.jena.ontology.Individual;
@@ -153,13 +154,21 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
             
 //            AnnotationProperty foafName = m.getAnnotationProperty(FOAF_0_1 + "name");
             DatatypeProperty foafName = m.getDatatypeProperty(FOAF_0_1 + "name");
-            person.addProperty(foafName, orcidProfile.getOrcidBio().getPersonalDetails().getCreditName().getContent());
-
             DatatypeProperty foafGivenName = m.getDatatypeProperty(FOAF_0_1 + "givenName");
-            person.addProperty(foafGivenName, orcidProfile.getOrcidBio().getPersonalDetails().getGivenNames().getContent());
-
             DatatypeProperty familyName = m.getDatatypeProperty(FOAF_0_1 + "familyName");
-            person.addProperty(familyName, orcidProfile.getOrcidBio().getPersonalDetails().getFamilyName().getContent());
+
+            PersonalDetails personalDetails = orcidProfile.getOrcidBio().getPersonalDetails();
+            
+            if (personalDetails.getCreditName() != null) {
+                person.addProperty(foafName, personalDetails.getCreditName().getContent());
+            }
+            
+            if (personalDetails.getGivenNames() != null) {
+                person.addProperty(foafGivenName, personalDetails.getGivenNames().getContent());
+            }
+            if (personalDetails.getFamilyName() != null) {
+                person.addProperty(familyName, personalDetails.getFamilyName().getContent());
+            }
             
             m.write(entityStream);
     }
