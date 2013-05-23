@@ -45,6 +45,7 @@ the software.
         <module>orcid-persistence</module>
         <module>orcid-model</module>
         <module>orcid-api-common</module>
+        <module>orcid-api-rdf</module>
         <module>orcid-metrics-web</module>
         <module>orcid-pub-web</module>
         <module>orcid-api-web</module>

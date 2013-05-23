@@ -14,7 +14,7 @@
  *
  * =============================================================================
  */
-package org.orcid.api.common.writer;
+package org.orcid.api.rdf;
 
 import static org.orcid.api.common.OrcidApiConstants.APPLICATION_RDFXML;
 
