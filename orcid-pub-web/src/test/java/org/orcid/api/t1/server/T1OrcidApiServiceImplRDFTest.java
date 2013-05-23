@@ -30,6 +30,7 @@ import javax.ws.rs.core.Response;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.orcid.api.common.OrcidApiService;
 import org.orcid.api.common.delegator.OrcidApiServiceDelegator;
@@ -95,6 +96,7 @@ public class T1OrcidApiServiceImplRDFTest {
         T1OrcidApiServiceImpl.T1_SEARCH_RESULTS_FOUND.clear();
     }
 
+    @Ignore
     @Test
     public void testViewBioDetailsRdf() {
         assertTrue(T1OrcidApiServiceImpl.T1_SEARCH_REQUESTS.count() == 0);
