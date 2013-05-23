@@ -145,7 +145,7 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
             // TODO: Load FOAF locally, and cached
             m.setDynamicImports(true);
             OrcidProfile orcidProfile = xml.getOrcidProfile();
-            String profileUri = orcidProfile.getOrcid().getValue();
+            String profileUri = orcidProfile.getOrcidId();
             Ontology ont = m.createOntology(profileUri + "#");
             ont.addImport(m.createResource(FOAF_0_1));
             m.setNsPrefix("foaf", FOAF_0_1);
