@@ -45,7 +45,6 @@ the software.
         <module>orcid-persistence</module>
         <module>orcid-model</module>
         <module>orcid-api-common</module>
-        <module>orcid-api-rdf</module>
         <module>orcid-metrics-web</module>
         <module>orcid-pub-web</module>
         <module>orcid-api-web</module>
@@ -923,6 +922,11 @@ the software.
                 <artifactId>selenium-java</artifactId>
                 <version>2.13.0</version>
                 <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.jena</groupId>
+                <artifactId>jena-core</artifactId>
+                <version>2.10.1</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
