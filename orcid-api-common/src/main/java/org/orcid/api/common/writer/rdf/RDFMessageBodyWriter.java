@@ -39,6 +39,7 @@ import org.orcid.jaxb.model.message.PersonalDetails;
 
 import com.hp.hpl.jena.ontology.DatatypeProperty;
 import com.hp.hpl.jena.ontology.Individual;
+import com.hp.hpl.jena.ontology.OntClass;
 import com.hp.hpl.jena.ontology.OntModel;
 import com.hp.hpl.jena.ontology.Ontology;
 import com.hp.hpl.jena.rdf.model.ModelFactory;
@@ -57,7 +58,8 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
     private Ontology foaf;
     private DatatypeProperty foafName;
     private DatatypeProperty foafGivenName;
-    private DatatypeProperty familyName;
+    private DatatypeProperty foafFamilyName;
+    private OntClass foafPerson;
 
     /**
      * Ascertain if the MessageBodyWriter supports a particular type.
@@ -158,7 +160,7 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
             try {             
                 
                 
-                Individual person = m.createIndividual(profileUri, m.getOntClass(FOAF_0_1 + "Person"));
+                Individual person = m.createIndividual(profileUri, foafPerson);
                 PersonalDetails personalDetails = orcidProfile.getOrcidBio().getPersonalDetails();
                 
                 if (personalDetails.getCreditName() != null) {
@@ -169,7 +171,7 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
                     person.addProperty(foafGivenName, personalDetails.getGivenNames().getContent());
                 }
                 if (personalDetails.getFamilyName() != null) {
-                    person.addProperty(familyName, personalDetails.getFamilyName().getContent());
+                    person.addProperty(foafFamilyName, personalDetails.getFamilyName().getContent());
                 }
                 
                 MediaType rdfXml = new MediaType("application", "rdf+xml");
@@ -211,8 +213,9 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         // foaf = ontModel.getOntology(FOAF_0_1);
 
         // properties from foaf
+        foafPerson =  ontModel.getOntClass(FOAF_0_1 + "Person");
         foafName = ontModel.getDatatypeProperty(FOAF_0_1 + "name");
         foafGivenName = ontModel.getDatatypeProperty(FOAF_0_1 + "givenName");
-        familyName = ontModel.getDatatypeProperty(FOAF_0_1 + "familyName");
+        foafFamilyName = ontModel.getDatatypeProperty(FOAF_0_1 + "familyName");
     }
 }
