@@ -173,7 +173,8 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
                     person.addProperty(familyName, personalDetails.getFamilyName().getContent());
                 }
                 
-                if (mediaType.toString().contains(APPLICATION_RDFXML)) {
+                MediaType rdfXml = new MediaType("application", "rdf+xml");
+                if (mediaType.isCompatible(rdfXml)) {
                     m.write(entityStream); 
                 } else {
                     // Must be Turtle or N3 then?
