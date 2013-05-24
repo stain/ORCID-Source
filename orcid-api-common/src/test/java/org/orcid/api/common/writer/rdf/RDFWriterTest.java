@@ -78,7 +78,7 @@ public class RDFWriterTest {
         assertTrue(str.contains("http://orcid.example.com/000-1337"));
         assertTrue(str.contains("foaf:name>John"));
         assertTrue(str.contains("rdf:about"));
-//        assertFalse(str.contains("subClassOf"));
+        assertFalse(str.contains("subClassOf"));
     }
 
     @Test
@@ -92,7 +92,7 @@ public class RDFWriterTest {
         assertTrue(str.contains("<http://orcid.example.com/000-1337>"));
         assertTrue(str.contains("foaf:Person"));
         assertTrue(str.contains("foaf:name \"John F"));
-//        assertFalse(str.contains("subClassOf"));
+        assertFalse(str.contains("subClassOf"));
     }
 
     

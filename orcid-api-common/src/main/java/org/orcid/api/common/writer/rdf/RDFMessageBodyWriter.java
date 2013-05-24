@@ -53,7 +53,6 @@ import com.hp.hpl.jena.rdf.model.ModelFactory;
 public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
     
     private static final String FOAF_0_1 = "http://xmlns.com/foaf/0.1/";
-    private OntModel ontModel;
     @SuppressWarnings("unused")
     private Ontology foaf;
     private DatatypeProperty foafName;
@@ -187,28 +186,33 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
     }
 
     protected OntModel getOntModel() {
-        if (ontModel != null) {
-            return ontModel;
+        if (foaf == null) {
+            loadFoaf();
         }
-        // No.. Let's go thread-safe and make it
-        synchronized (this) {
-            if (ontModel == null) {
-                // Create RDF model
-                ontModel = ModelFactory.createOntologyModel();
-                ontModel.setDynamicImports(true);
-                InputStream foafOnt = getClass().getResourceAsStream("foaf.rdf");
-                ontModel.setNsPrefix("foaf", FOAF_0_1);
-                ontModel.read(foafOnt, FOAF_0_1);
 
-                // The loaded ontology
-                foaf = ontModel.getOntology(FOAF_0_1);
-                
-                // properties from foaf
-                foafName = ontModel.getDatatypeProperty(FOAF_0_1 + "name");
-                foafGivenName = ontModel.getDatatypeProperty(FOAF_0_1 + "givenName");
-                familyName = ontModel.getDatatypeProperty(FOAF_0_1 + "familyName");
-            }
-            return ontModel;
+        OntModel ontModel = ModelFactory.createOntologyModel();
+        ontModel.setNsPrefix("foaf", FOAF_0_1);
+        ontModel.getDocumentManager().loadImports(foaf.getOntModel());
+        return ontModel;
+    }
+
+    protected synchronized void loadFoaf() {
+        if (foaf != null) {
+            return;
         }
+        OntModel ontModel = ModelFactory.createOntologyModel();
+
+        // Load from classpath
+        InputStream foafOnt = getClass().getResourceAsStream("foaf.rdf");
+        foaf = ontModel.createOntology(FOAF_0_1);
+        foaf.getModel().read(foafOnt, FOAF_0_1);
+
+        // // The loaded ontology
+        // foaf = ontModel.getOntology(FOAF_0_1);
+
+        // properties from foaf
+        foafName = ontModel.getDatatypeProperty(FOAF_0_1 + "name");
+        foafGivenName = ontModel.getDatatypeProperty(FOAF_0_1 + "givenName");
+        familyName = ontModel.getDatatypeProperty(FOAF_0_1 + "familyName");
     }
 }
