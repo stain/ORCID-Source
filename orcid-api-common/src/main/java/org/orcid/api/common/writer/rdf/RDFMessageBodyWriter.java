@@ -19,6 +19,7 @@ package org.orcid.api.common.writer.rdf;
 import static org.orcid.api.common.OrcidApiConstants.APPLICATION_RDFXML;
 import static org.orcid.api.common.OrcidApiConstants.TEXT_N3;
 import static org.orcid.api.common.OrcidApiConstants.TEXT_TURTLE;
+import static org.orcid.api.common.OrcidApiConstants.*;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,9 +37,11 @@ import javax.ws.rs.ext.Provider;
 import org.orcid.jaxb.model.message.OrcidMessage;
 import org.orcid.jaxb.model.message.OrcidProfile;
 import org.orcid.jaxb.model.message.PersonalDetails;
+import org.springframework.beans.factory.annotation.Value;
 
 import com.hp.hpl.jena.ontology.DatatypeProperty;
 import com.hp.hpl.jena.ontology.Individual;
+import com.hp.hpl.jena.ontology.ObjectProperty;
 import com.hp.hpl.jena.ontology.OntClass;
 import com.hp.hpl.jena.ontology.OntModel;
 import com.hp.hpl.jena.ontology.Ontology;
@@ -60,6 +63,16 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
     private DatatypeProperty foafGivenName;
     private DatatypeProperty foafFamilyName;
     private OntClass foafPerson;
+    private OntClass foafOnlineAccount;
+    private ObjectProperty foafAccount;
+    private ObjectProperty foafAccountServiceHomepage;
+
+    @Value("${org.orcid.core.baseUri:http://orcid.org}")
+    private String baseUri = "http://orcid.org";
+    private OntClass foafDocument;
+    private DatatypeProperty foafAccountName;
+    private ObjectProperty foafPrimaryTopic;
+    private OntClass foafPersonalProfileDocument;
 
     /**
      * Ascertain if the MessageBodyWriter supports a particular type.
@@ -147,44 +160,52 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
      */
     @Override
     public void writeTo(OrcidMessage xml, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders,
-            OutputStream entityStream) throws IOException, WebApplicationException {
+        OutputStream entityStream) throws IOException, WebApplicationException {
 
-            OntModel m = getOntModel();
-            
-            OrcidProfile orcidProfile = xml.getOrcidProfile();
-            String profileUri = orcidProfile.getOrcidId();
-            
-            Ontology ont = m.createOntology(profileUri + "#");
-            ont.addImport(m.createResource(FOAF_0_1));
-            
-            try {             
-                
-                
-                Individual person = m.createIndividual(profileUri, foafPerson);
-                PersonalDetails personalDetails = orcidProfile.getOrcidBio().getPersonalDetails();
-                
-                if (personalDetails.getCreditName() != null) {
-                    person.addProperty(foafName, personalDetails.getCreditName().getContent());
-                }
-                
-                if (personalDetails.getGivenNames() != null) {
-                    person.addProperty(foafGivenName, personalDetails.getGivenNames().getContent());
-                }
-                if (personalDetails.getFamilyName() != null) {
-                    person.addProperty(foafFamilyName, personalDetails.getFamilyName().getContent());
-                }
-                
-                MediaType rdfXml = new MediaType("application", "rdf+xml");
-                if (mediaType.isCompatible(rdfXml)) {
-                    m.write(entityStream); 
-                } else {
-                    // Must be Turtle or N3 then?
-                    m.write(entityStream, "N3");
-                } 
-            } finally {
-                m.remove(ont.getModel());
+        OntModel m = getOntModel();
+        
+        OrcidProfile orcidProfile = xml.getOrcidProfile();
+        String orcidUri = orcidProfile.getOrcidId();
+        
+        // Add /orcid-profile to identify the profile itself
+        String orcidProfileUri = orcidUri + PROFILE_POST_PATH;
+        
+        Individual person = m.createIndividual(orcidUri, foafPerson);
+        PersonalDetails personalDetails = orcidProfile.getOrcidBio().getPersonalDetails();
+        
+        if (personalDetails.getCreditName() != null) {
+            person.addProperty(foafName, personalDetails.getCreditName().getContent());
+        }
+        
+        if (personalDetails.getGivenNames() != null) {
+            person.addProperty(foafGivenName, personalDetails.getGivenNames().getContent());
+        }
+        if (personalDetails.getFamilyName() != null) {
+            person.addProperty(foafFamilyName, personalDetails.getFamilyName().getContent());
+        }
 
+        
+        Individual account = m.createIndividual(orcidProfileUri, foafOnlineAccount);
+        person.addProperty(foafAccount, account);
+        if (baseUri != null) {
+            account.addProperty(foafAccountServiceHomepage, m.createIndividual(baseUri, null));
+        }
+        account.addProperty(foafAccountName, orcidProfile.getOrcid().getValue());
+        if (orcidProfile.getOrcidHistory() != null) {
+            if (orcidProfile.getOrcidHistory().isClaimed().booleanValue()) {
+                // Set account as PersonalProfileDocument ?
+                account.addRDFType(foafPersonalProfileDocument);
             }
+        }
+        account.addProperty(foafPrimaryTopic, person);
+        
+        MediaType rdfXml = new MediaType("application", "rdf+xml");
+        if (mediaType.isCompatible(rdfXml)) {
+            m.write(entityStream); 
+        } else {
+            // Must be Turtle or N3 then?
+            m.write(entityStream, "N3");
+        } 
     }
 
     protected OntModel getOntModel() {
@@ -194,7 +215,7 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
 
         OntModel ontModel = ModelFactory.createOntologyModel();
         ontModel.setNsPrefix("foaf", FOAF_0_1);
-        ontModel.getDocumentManager().loadImports(foaf.getOntModel());
+        //ontModel.getDocumentManager().loadImports(foaf.getOntModel());
         return ontModel;
     }
 
@@ -212,10 +233,23 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         // // The loaded ontology
         // foaf = ontModel.getOntology(FOAF_0_1);
 
-        // properties from foaf
+        // classes from foaf
+        foafDocument =  ontModel.getOntClass(FOAF_0_1 + "Document");
         foafPerson =  ontModel.getOntClass(FOAF_0_1 + "Person");
+        foafOnlineAccount =  ontModel.getOntClass(FOAF_0_1 + "OnlineAccount");
+        foafPersonalProfileDocument =  ontModel.getOntClass(FOAF_0_1 + "PersonalProfileDocument");
+        
+        // properties from foaf
         foafName = ontModel.getDatatypeProperty(FOAF_0_1 + "name");
         foafGivenName = ontModel.getDatatypeProperty(FOAF_0_1 + "givenName");
         foafFamilyName = ontModel.getDatatypeProperty(FOAF_0_1 + "familyName");
+        foafAccountName = ontModel.getDatatypeProperty(FOAF_0_1 + "accountName");
+        
+        
+        foafPrimaryTopic = ontModel.getObjectProperty(FOAF_0_1 + "primaryTopic");
+        
+        foafAccount = ontModel.getObjectProperty(FOAF_0_1 + "account");
+        foafAccountServiceHomepage = ontModel.getObjectProperty(FOAF_0_1 + "accountServiceHomepage");
+
     }
 }
