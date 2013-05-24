@@ -21,6 +21,7 @@ import static org.orcid.api.common.OrcidApiConstants.TEXT_N3;
 import static org.orcid.api.common.OrcidApiConstants.TEXT_TURTLE;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
@@ -52,6 +53,12 @@ import com.hp.hpl.jena.rdf.model.ModelFactory;
 public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
     
     private static final String FOAF_0_1 = "http://xmlns.com/foaf/0.1/";
+    private OntModel ontModel;
+    @SuppressWarnings("unused")
+    private Ontology foaf;
+    private DatatypeProperty foafName;
+    private DatatypeProperty foafGivenName;
+    private DatatypeProperty familyName;
 
     /**
      * Ascertain if the MessageBodyWriter supports a particular type.
@@ -101,6 +108,8 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
      */
     @Override
     public long getSize(OrcidMessage message, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
+        // TODO: Can we calculate the size in advance? 
+        // It would mean buffering up the actual RDF
         return -1;
     }
 
@@ -138,42 +147,67 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
     @Override
     public void writeTo(OrcidMessage xml, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders,
             OutputStream entityStream) throws IOException, WebApplicationException {
-                    
-            // Create RDF model
-            OntModel m = ModelFactory.createOntologyModel();
-            // TODO: Load FOAF locally, and cached
-            m.setDynamicImports(true);
+
+            OntModel m = getOntModel();
+            
             OrcidProfile orcidProfile = xml.getOrcidProfile();
             String profileUri = orcidProfile.getOrcidId();
+            
             Ontology ont = m.createOntology(profileUri + "#");
             ont.addImport(m.createResource(FOAF_0_1));
-            m.setNsPrefix("foaf", FOAF_0_1);
             
-            Individual person = m.createIndividual(profileUri, m.getOntClass(FOAF_0_1 + "Person"));
-            
-//            AnnotationProperty foafName = m.getAnnotationProperty(FOAF_0_1 + "name");
-            DatatypeProperty foafName = m.getDatatypeProperty(FOAF_0_1 + "name");
-            DatatypeProperty foafGivenName = m.getDatatypeProperty(FOAF_0_1 + "givenName");
-            DatatypeProperty familyName = m.getDatatypeProperty(FOAF_0_1 + "familyName");
+            try {             
+                
+                
+                Individual person = m.createIndividual(profileUri, m.getOntClass(FOAF_0_1 + "Person"));
+                PersonalDetails personalDetails = orcidProfile.getOrcidBio().getPersonalDetails();
+                
+                if (personalDetails.getCreditName() != null) {
+                    person.addProperty(foafName, personalDetails.getCreditName().getContent());
+                }
+                
+                if (personalDetails.getGivenNames() != null) {
+                    person.addProperty(foafGivenName, personalDetails.getGivenNames().getContent());
+                }
+                if (personalDetails.getFamilyName() != null) {
+                    person.addProperty(familyName, personalDetails.getFamilyName().getContent());
+                }
+                
+                if (mediaType.toString().contains(APPLICATION_RDFXML)) {
+                    m.write(entityStream); 
+                } else {
+                    // Must be Turtle or N3 then?
+                    m.write(entityStream, "N3");
+                } 
+            } finally {
+                m.remove(ont.getModel());
 
-            PersonalDetails personalDetails = orcidProfile.getOrcidBio().getPersonalDetails();
-            
-            if (personalDetails.getCreditName() != null) {
-                person.addProperty(foafName, personalDetails.getCreditName().getContent());
             }
-            
-            if (personalDetails.getGivenNames() != null) {
-                person.addProperty(foafGivenName, personalDetails.getGivenNames().getContent());
+    }
+
+    protected OntModel getOntModel() {
+        if (ontModel != null) {
+            return ontModel;
+        }
+        // No.. Let's go thread-safe and make it
+        synchronized (this) {
+            if (ontModel == null) {
+                // Create RDF model
+                ontModel = ModelFactory.createOntologyModel();
+                ontModel.setDynamicImports(true);
+                InputStream foafOnt = getClass().getResourceAsStream("foaf.rdf");
+                ontModel.setNsPrefix("foaf", FOAF_0_1);
+                ontModel.read(foafOnt, FOAF_0_1);
+
+                // The loaded ontology
+                foaf = ontModel.getOntology(FOAF_0_1);
+                
+                // properties from foaf
+                foafName = ontModel.getDatatypeProperty(FOAF_0_1 + "name");
+                foafGivenName = ontModel.getDatatypeProperty(FOAF_0_1 + "givenName");
+                familyName = ontModel.getDatatypeProperty(FOAF_0_1 + "familyName");
             }
-            if (personalDetails.getFamilyName() != null) {
-                person.addProperty(familyName, personalDetails.getFamilyName().getContent());
-            }
-            
-            if (mediaType.toString().equals(APPLICATION_RDFXML)) {
-                m.write(entityStream); 
-            } else {
-                // Must be Turtle or N3 then?
-                m.write(entityStream, "N3");
-            }
+            return ontModel;
+        }
     }
 }
