@@ -125,11 +125,6 @@ public class HtmlMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
     @Override
     public void writeTo(OrcidMessage message, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders,
             OutputStream entityStream) throws IOException, WebApplicationException {
-        System.err.println("HTML Oh noooooo");
-        if (true) {
-            throw new RuntimeException("HTML Yay");
-        }            
-
         entityStream.write(message.toString().getBytes());
     }
 }
