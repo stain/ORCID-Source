@@ -165,26 +165,26 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         OntModel m = getOntModel();
         
         OrcidProfile orcidProfile = xml.getOrcidProfile();
-        String orcidUri = orcidProfile.getOrcidId();
         
-        // Add /orcid-profile to identify the profile itself
-        String orcidProfileUri = orcidUri + PROFILE_POST_PATH;
         
-        Individual person = m.createIndividual(orcidUri, foafPerson);
-        PersonalDetails personalDetails = orcidProfile.getOrcidBio().getPersonalDetails();
+        Individual person = describePerson(orcidProfile, m);
         
-        if (personalDetails.getCreditName() != null) {
-            person.addProperty(foafName, personalDetails.getCreditName().getContent());
-        }
+        Individual account = describeAccount(orcidProfile, m, person);
         
-        if (personalDetails.getGivenNames() != null) {
-            person.addProperty(foafGivenName, personalDetails.getGivenNames().getContent());
-        }
-        if (personalDetails.getFamilyName() != null) {
-            person.addProperty(foafFamilyName, personalDetails.getFamilyName().getContent());
-        }
+        
+        MediaType rdfXml = new MediaType("application", "rdf+xml");
+        if (mediaType.isCompatible(rdfXml)) {
+            m.write(entityStream); 
+        } else {
+            // Must be Turtle or N3 then?
+            m.write(entityStream, "N3");
+        } 
+    }
 
-        
+    private Individual describeAccount(OrcidProfile orcidProfile, OntModel m, Individual person) {
+        // Add /orcid-profile to identify the profile itself
+        String orcidProfileUri = orcidProfile.getOrcidId() + PROFILE_POST_PATH;
+
         Individual account = m.createIndividual(orcidProfileUri, foafOnlineAccount);
         person.addProperty(foafAccount, account);
         if (baseUri != null) {
@@ -198,14 +198,27 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
             }
         }
         account.addProperty(foafPrimaryTopic, person);
+        return account;
+    }
+
+    private Individual describePerson(OrcidProfile orcidProfile, OntModel m) {
+        String orcidUri = orcidProfile.getOrcidId();
+        Individual person = m.createIndividual(orcidUri, foafPerson);
+        PersonalDetails personalDetails = orcidProfile.getOrcidBio().getPersonalDetails();
         
-        MediaType rdfXml = new MediaType("application", "rdf+xml");
-        if (mediaType.isCompatible(rdfXml)) {
-            m.write(entityStream); 
+        if (personalDetails.getCreditName() != null) {
+            person.addProperty(foafName, personalDetails.getCreditName().getContent());
         } else {
-            // Must be Turtle or N3 then?
-            m.write(entityStream, "N3");
-        } 
+            // TODO: Should we generate a foafName assuming first/last order?
+        }
+        
+        if (personalDetails.getGivenNames() != null) {
+            person.addProperty(foafGivenName, personalDetails.getGivenNames().getContent());
+        }
+        if (personalDetails.getFamilyName() != null) {
+            person.addProperty(foafFamilyName, personalDetails.getFamilyName().getContent());
+        }
+        return person;
     }
 
     protected OntModel getOntModel() {
