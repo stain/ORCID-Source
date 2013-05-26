@@ -56,9 +56,14 @@ import com.hp.hpl.jena.rdf.model.ModelFactory;
 @Produces( { APPLICATION_RDFXML, TEXT_TURTLE, TEXT_N3 })
 public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
     
+    private static final String FOAF_RDF = "foaf.rdf";
+    private static final String PAV = "http://purl.org/pav/";
+    private static final String PAV_RDF = "pav.rdf";
+    private static final String PROV_O_RDF = "prov-o.rdf";
+    private static final String PROV = "http://www.w3.org/prov#";
+    private static final String PROV_O = "http://www.w3.org/prov-o#";
     private static final String FOAF_0_1 = "http://xmlns.com/foaf/0.1/";
-    @SuppressWarnings("unused")
-    private Ontology foaf;
+
     private DatatypeProperty foafName;
     private DatatypeProperty foafGivenName;
     private DatatypeProperty foafFamilyName;
@@ -69,10 +74,12 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
 
     @Value("${org.orcid.core.baseUri:http://orcid.org}")
     private String baseUri = "http://orcid.org";
-    private OntClass foafDocument;
     private DatatypeProperty foafAccountName;
     private ObjectProperty foafPrimaryTopic;
     private OntClass foafPersonalProfileDocument;
+    private OntModel prov;
+    private OntModel foaf;
+    private OntModel pav;
 
     /**
      * Ascertain if the MessageBodyWriter supports a particular type.
@@ -166,11 +173,12 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         
         OrcidProfile orcidProfile = xml.getOrcidProfile();
         
-        
-        Individual person = describePerson(orcidProfile, m);
-        
-        Individual account = describeAccount(orcidProfile, m, person);
-        
+        if (orcidProfile != null) {        
+            Individual person = describePerson(orcidProfile, m);        
+            if (person != null) {
+                Individual account = describeAccount(orcidProfile, m, person);
+            }
+        }
         
         MediaType rdfXml = new MediaType("application", "rdf+xml");
         if (mediaType.isCompatible(rdfXml)) {
@@ -204,7 +212,13 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
     private Individual describePerson(OrcidProfile orcidProfile, OntModel m) {
         String orcidUri = orcidProfile.getOrcidId();
         Individual person = m.createIndividual(orcidUri, foafPerson);
+        if (orcidProfile.getOrcidBio() == null) {
+            return person;
+        }
         PersonalDetails personalDetails = orcidProfile.getOrcidBio().getPersonalDetails();
+        if (personalDetails == null) {
+            return person;
+        }
         
         if (personalDetails.getCreditName() != null) {
             person.addProperty(foafName, personalDetails.getCreditName().getContent());
@@ -225,10 +239,47 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         if (foaf == null) {
             loadFoaf();
         }
-
+        if (prov == null) {
+            loadProv();
+        }
+        if (pav == null) {
+            loadPav();
+        }
+        
+        
         OntModel ontModel = ModelFactory.createOntologyModel();
         ontModel.setNsPrefix("foaf", FOAF_0_1);
         //ontModel.getDocumentManager().loadImports(foaf.getOntModel());
+        return ontModel;
+    }
+
+    protected synchronized void loadPav() {
+        if (pav != null) {
+            return;
+        }
+        OntModel ontModel = loadOntologyFromClasspath(PAV_RDF, PAV);            
+        pav = ontModel;            
+    }
+    
+    protected synchronized void loadProv() {
+        if (prov != null) {
+            return;
+        }
+        OntModel ontModel = loadOntologyFromClasspath(PROV_O_RDF, PROV_O);
+        
+        prov = ontModel;
+    }
+
+    protected OntModel loadOntologyFromClasspath(String classPathUri, String uri) {
+        OntModel ontModel = ModelFactory.createOntologyModel();
+
+        // Load from classpath
+        InputStream inStream = getClass().getResourceAsStream(classPathUri);
+        if (inStream == null) {
+            throw new IllegalArgumentException("Can't load " + classPathUri);
+        }
+        Ontology ontology = ontModel.createOntology(uri);
+        ontModel.read(inStream, uri);
         return ontModel;
     }
 
@@ -236,18 +287,12 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         if (foaf != null) {
             return;
         }
-        OntModel ontModel = ModelFactory.createOntologyModel();
 
-        // Load from classpath
-        InputStream foafOnt = getClass().getResourceAsStream("foaf.rdf");
-        foaf = ontModel.createOntology(FOAF_0_1);
-        foaf.getModel().read(foafOnt, FOAF_0_1);
-
-        // // The loaded ontology
+        OntModel ontModel = loadOntologyFromClasspath(FOAF_RDF, FOAF_0_1);            
+        
         // foaf = ontModel.getOntology(FOAF_0_1);
 
         // classes from foaf
-        foafDocument =  ontModel.getOntClass(FOAF_0_1 + "Document");
         foafPerson =  ontModel.getOntClass(FOAF_0_1 + "Person");
         foafOnlineAccount =  ontModel.getOntClass(FOAF_0_1 + "OnlineAccount");
         foafPersonalProfileDocument =  ontModel.getOntClass(FOAF_0_1 + "PersonalProfileDocument");
@@ -264,5 +309,6 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         foafAccount = ontModel.getObjectProperty(FOAF_0_1 + "account");
         foafAccountServiceHomepage = ontModel.getObjectProperty(FOAF_0_1 + "accountServiceHomepage");
 
+        foaf = ontModel;            
     }
 }
