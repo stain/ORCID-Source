@@ -20,7 +20,6 @@ import static org.orcid.api.common.OrcidApiConstants.APPLICATION_RDFXML;
 import static org.orcid.api.common.OrcidApiConstants.PROFILE_POST_PATH;
 import static org.orcid.api.common.OrcidApiConstants.TEXT_N3;
 import static org.orcid.api.common.OrcidApiConstants.TEXT_TURTLE;
-import static org.orcid.api.common.OrcidApiConstants.WORKS_PATH;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -30,6 +29,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.net.URI;
 import java.nio.charset.Charset;
+import java.util.Arrays;
 import java.util.List;
 
 import javax.ws.rs.Produces;
@@ -41,29 +41,32 @@ import javax.ws.rs.core.UriBuilder;
 import javax.ws.rs.core.UriInfo;
 import javax.ws.rs.ext.MessageBodyWriter;
 import javax.ws.rs.ext.Provider;
+import javax.xml.datatype.XMLGregorianCalendar;
 
 import org.orcid.api.common.OrcidApiService;
 import org.orcid.jaxb.model.message.Address;
 import org.orcid.jaxb.model.message.Biography;
 import org.orcid.jaxb.model.message.ContactDetails;
-import org.orcid.jaxb.model.message.CreationMethod;
 import org.orcid.jaxb.model.message.Email;
 import org.orcid.jaxb.model.message.ErrorDesc;
+import org.orcid.jaxb.model.message.LastModifiedDate;
 import org.orcid.jaxb.model.message.OrcidBio;
 import org.orcid.jaxb.model.message.OrcidHistory;
 import org.orcid.jaxb.model.message.OrcidMessage;
 import org.orcid.jaxb.model.message.OrcidProfile;
 import org.orcid.jaxb.model.message.PersonalDetails;
+import org.orcid.jaxb.model.message.ResearcherUrl;
+import org.orcid.jaxb.model.message.ResearcherUrls;
 import org.springframework.beans.factory.annotation.Value;
 
 import com.hp.hpl.jena.datatypes.xsd.XSDDatatype;
-import com.hp.hpl.jena.datatypes.xsd.impl.XSDDateTimeType;
 import com.hp.hpl.jena.ontology.DatatypeProperty;
 import com.hp.hpl.jena.ontology.Individual;
 import com.hp.hpl.jena.ontology.ObjectProperty;
 import com.hp.hpl.jena.ontology.OntClass;
 import com.hp.hpl.jena.ontology.OntModel;
 import com.hp.hpl.jena.ontology.Ontology;
+import com.hp.hpl.jena.rdf.model.Literal;
 import com.hp.hpl.jena.rdf.model.ModelFactory;
 
 /**
@@ -81,8 +84,8 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
     private static final String PAV = "http://purl.org/pav/";
     private static final String PAV_RDF = "pav.rdf";
     private static final String PROV_O_RDF = "prov-o.rdf";
-    private static final String PROV = "http://www.w3.org/prov#";
-    private static final String PROV_O = "http://www.w3.org/prov-o#";
+    private static final String PROV = "http://www.w3.org/ns/prov#";
+    private static final String PROV_O = "http://www.w3.org/ns/prov-o#";
     private static final String FOAF_0_1 = "http://xmlns.com/foaf/0.1/";
     protected static final String TMP_BASE = "app://614879b4-48c3-45ab-a828-2a72e43f80d9/";
     private static final Charset UTF8 = Charset.forName("UTF-8");
@@ -114,14 +117,19 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
     private OntClass provAgent;
     private ObjectProperty provWasAttributedTo;
     private DatatypeProperty provGeneratedAt;
-    private ObjectProperty pavContributedBy;
-    private DatatypeProperty foafMbox;
+    private ObjectProperty pavCuratedBy;
+    private ObjectProperty foafMbox;
     private ObjectProperty foafMaker;
     private DatatypeProperty foafPlan;
     private ObjectProperty foafPage;
     private ObjectProperty foafHomepage;
-    private DatatypeProperty foafBasedNear;
+    private ObjectProperty foafBasedNear;
     private DatatypeProperty pavLastUpdateAt;
+    private ObjectProperty provAlternateOf;
+    private ObjectProperty pavImportedBy;
+    private DatatypeProperty pavCreatedOn;
+    private DatatypeProperty provInvalidatedAt;
+    private DatatypeProperty pavContributedOn;
 
     
     /**
@@ -270,13 +278,11 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         account.addProperty(foafPrimaryTopic, person);
         OrcidHistory history = orcidProfile.getOrcidHistory();
         if (history != null) {
-            if (orcidProfile.getOrcidHistory().isClaimed().booleanValue()) {
+            if (history.isClaimed().booleanValue()) {
                 // Set account as PersonalProfileDocument
                 account.addRDFType(foafPersonalProfileDocument);
                 account.addProperty(foafMaker, person);
                 
-                // If it's claimed,  he's probably done at least some contributions
-                account.addProperty(pavContributedBy, person);
             }
             // Who made the profile?
             switch (history.getCreationMethod()) {
@@ -289,7 +295,13 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
                 break;
             case API:
                 Individual api = m.createIndividual(MEMBER_API, provSoftwareAgent);
-                account.addProperty(pavCreatedWith, api);
+                account.addProperty(pavImportedBy, api);
+
+                if (history.isClaimed().booleanValue()) {
+                    account.addProperty(pavCuratedBy, person);
+                }
+
+                
                 break;
             default:
                 // Some unknown agent!
@@ -297,13 +309,19 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
             }
 
             if (history.getLastModifiedDate() != null) {
-                String time = history.getLastModifiedDate().getValue().toXMLFormat();
-                m.createTypedLiteral(time, XSDDatatype.XSDdateTime);
-                account.addLiteral(pavLastUpdateAt, time);
-
-                // Or does this work?
-                account.addLiteral(provGeneratedAt, history.getLastModifiedDate());
-
+                Literal when = calendarAsLiteral(history.getLastModifiedDate().getValue(), m);
+                account.addLiteral(pavLastUpdateAt, when);
+                account.addLiteral(provGeneratedAt, when);
+            }            
+            if (history.getSubmissionDate() != null) {
+                account.addLiteral(pavCreatedOn, 
+                        calendarAsLiteral(history.getSubmissionDate().getValue(), m));
+            }           
+            if (history.getCompletionDate() != null) {
+                account.addLiteral(pavContributedOn, calendarAsLiteral(history.getDeactivationDate().getValue(), m));
+            }            
+            if (history.getDeactivationDate() != null) {
+                account.addLiteral(provInvalidatedAt, calendarAsLiteral(history.getDeactivationDate().getValue(), m));
             }
             
         }
@@ -315,6 +333,10 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         person.addProperty(foafPublications, m.createIndividual(worksDetails.toASCIIString(), null));
         
         return account;
+    }
+
+    private Literal calendarAsLiteral(XMLGregorianCalendar cal, OntModel m) {
+        return m.createTypedLiteral(cal.toXMLFormat(), XSDDatatype.XSDdateTime);
     }
 
     private Individual describePerson(OrcidProfile orcidProfile, OntModel m) {
@@ -333,8 +355,55 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         describePersonalDetails(orcidBio.getPersonalDetails(), person, m);
         describeContactDetails(orcidBio.getContactDetails(), person, m);
         describeBiography(orcidBio.getBiography(), person, m);
-        
+        describeResearcherUrls(orcidBio.getResearcherUrls(), person, m);
         return person;
+    }
+
+    private void describeResearcherUrls(ResearcherUrls researcherUrls, Individual person, OntModel m) {
+        if (researcherUrls == null || researcherUrls.getResearcherUrl() == null) {
+            return;
+        }
+        for (ResearcherUrl url : researcherUrls.getResearcherUrl()) {
+            Individual page = m.createIndividual(url.getUrl().getValue(), null);
+            if (isHomePage(url)) {
+                person.addProperty(foafHomepage, page);
+            } else if(isFoaf(url)) {
+                // TODO: Is this the proper way to link to other FOAF URIs?
+                // What if we want to link to the URL of the other FOAF *Profile*?
+                
+                // Note: We don't dear to do owl:sameAs or prov:specializationOf
+                // as we don't know the extent of the other FOAF profile - we'll 
+                // suffice to say it's an alternate view of the same person
+                person.addProperty(provAlternateOf, page);
+                page.addRDFType(foafPerson);
+                page.addRDFType(provPerson);
+                person.addSeeAlso(page);
+            } else {
+                person.addProperty(foafPage, page);
+            }
+        }
+    }
+
+    private boolean isFoaf(ResearcherUrl url) {
+        if (url.getUrlName() == null || url.getUrlName().getContent() == null) {
+            return false;
+        }
+        return url.getUrlName().getContent().equalsIgnoreCase("foaf");
+    }
+
+    /**
+     * There's no indication in ORCID if the URL is a homepage or some other
+     * page, so we'll guess based on it's name, it be something similar to
+     * "home page".
+     */
+    private boolean isHomePage(ResearcherUrl url) {
+        if (url.getUrlName() == null || url.getUrlName().getContent() == null) {
+            return false;
+        }
+        String name = url.getUrlName().getContent().toLowerCase();
+        List<String> candidates = Arrays.asList("homepage", "home", "home page", "personal", 
+                "personal homepage", "personal home page");
+        return candidates.contains(name);
     }
 
     private void describeBiography(Biography biography, Individual person, OntModel m) {
@@ -353,7 +422,9 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
        if (emails != null) {
            for (Email email : emails) {
                if (email.isCurrent()) {
-                   person.addProperty(foafMbox, email.getValue());
+                   
+                Individual mbox = m.createIndividual("mailto:" + email.getValue(), null);
+                person.addProperty(foafMbox, mbox);
                }
            }
        }
@@ -413,6 +484,8 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         
         OntModel ontModel = ModelFactory.createOntologyModel();
         ontModel.setNsPrefix("foaf", FOAF_0_1);
+        ontModel.setNsPrefix("prov", PROV);
+        ontModel.setNsPrefix("pav", PAV);
         //ontModel.getDocumentManager().loadImports(foaf.getOntModel());
         return ontModel;
     }
@@ -424,13 +497,30 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         OntModel ontModel = loadOntologyFromClasspath(PAV_RDF, PAV);         
         
         pavCreatedBy = ontModel.getObjectProperty(PAV + "createdBy");
-        pavContributedBy = ontModel.getObjectProperty(PAV + "contributedBy");
+        pavCuratedBy = ontModel.getObjectProperty(PAV + "curatedBy");
+        pavImportedBy = ontModel.getObjectProperty(PAV + "importedBy");
         pavCreatedWith = ontModel.getObjectProperty(PAV + "createdWith");
         
-        pavLastUpdateAt = ontModel.getDatatypeProperty(PAV + "lastUpdateAt");
+        pavCreatedOn = ontModel.getDatatypeProperty(PAV + "createdOn");
+        pavLastUpdateAt = ontModel.getDatatypeProperty(PAV + "lastUpdateOn");
+        pavContributedOn = ontModel.getDatatypeProperty(PAV + "contributedOn");
+        
+        checkNotNull(pavCreatedBy, pavCuratedBy, pavImportedBy, pavCreatedWith,
+                pavCreatedOn, pavLastUpdateAt, pavContributedOn);
         pav = ontModel;            
     }
     
+    private void checkNotNull(Object... possiblyNulls) {
+        int i=0;
+        for (Object check : possiblyNulls) {
+            if (check == null) {
+                throw new IllegalStateException("Could not load item #" + i);
+            }
+            i++;
+        }
+        
+    }
+
     protected synchronized void loadProv() {
         if (prov != null) {
             return;
@@ -441,8 +531,11 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         provAgent = ontModel.getOntClass(PROV + "Agent");
         provSoftwareAgent =  ontModel.getOntClass(PROV + "SoftwareAgent");
         provWasAttributedTo = ontModel.getObjectProperty(PROV + "wasAttributedTo");
+        provAlternateOf = ontModel.getObjectProperty(PROV + "alternateOf");
         provGeneratedAt = ontModel.getDatatypeProperty(PROV + "generatedAtTime");
+        provInvalidatedAt = ontModel.getDatatypeProperty(PROV + "invalidatedAtTime");
         
+        checkNotNull(provPerson, provAgent, provSoftwareAgent, provWasAttributedTo, provAlternateOf, provGeneratedAt, provInvalidatedAt);
         prov = ontModel;
     }
 
@@ -479,8 +572,8 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         foafFamilyName = ontModel.getDatatypeProperty(FOAF_0_1 + "familyName");
         foafAccountName = ontModel.getDatatypeProperty(FOAF_0_1 + "accountName");
         foafPlan = ontModel.getDatatypeProperty(FOAF_0_1 + "plan");
-        foafMbox = ontModel.getDatatypeProperty(FOAF_0_1 + "mbox");
-        foafBasedNear = ontModel.getDatatypeProperty(FOAF_0_1 + "based_near");
+        foafMbox = ontModel.getObjectProperty(FOAF_0_1 + "mbox");
+        foafBasedNear = ontModel.getObjectProperty(FOAF_0_1 + "based_near");
         
         
         foafPrimaryTopic = ontModel.getObjectProperty(FOAF_0_1 + "primaryTopic");
@@ -492,6 +585,10 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         foafAccount = ontModel.getObjectProperty(FOAF_0_1 + "account");
         foafAccountServiceHomepage = ontModel.getObjectProperty(FOAF_0_1 + "accountServiceHomepage");
 
+        checkNotNull(foafPerson,foafOnlineAccount,foafPersonalProfileDocument, foafName, foafGivenName, foafFamilyName, foafAccountName,
+                foafPlan, foafMbox, foafBasedNear, foafPrimaryTopic, foafMaker, foafPage, foafHomepage, foafPublications, foafAccount, 
+                foafAccountServiceHomepage);
+                
         foaf = ontModel;            
     }
 
