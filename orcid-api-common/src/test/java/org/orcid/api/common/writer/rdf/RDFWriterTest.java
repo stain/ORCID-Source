@@ -20,9 +20,15 @@ import static org.junit.Assert.*;
 import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayOutputStream;
+import java.net.URI;
 import java.util.Arrays;
+import java.util.List;
 
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.MultivaluedMap;
+import javax.ws.rs.core.PathSegment;
+import javax.ws.rs.core.UriBuilder;
+import javax.ws.rs.core.UriInfo;
 
 import org.junit.Test;
 import org.orcid.jaxb.model.message.ContactDetails;
@@ -53,7 +59,7 @@ public class RDFWriterTest {
         bio.setPersonalDetails(personal);
         personal.setFamilyName(new FamilyName("Doe"));
         personal.setCreditName(new CreditName("John F Doe"));
-        personal.setGivenNames(new GivenNames("John F"));
+        personal.setGivenNames(new GivenNames("John"));
         personal.setOtherNames(new OtherNames());
         personal.getOtherNames().addOtherName("Johnny");
         personal.getOtherNames().addOtherName("Mr Doe");
@@ -71,12 +77,13 @@ public class RDFWriterTest {
     public void writeRdfXML() throws Exception {
         
         ByteArrayOutputStream entityStream = new ByteArrayOutputStream(1024);
+
         rdfWriter.writeTo(fakeBio(), OrcidMessage.class, null, null, new MediaType("application", "rdf+xml"), null, entityStream);
         
         String str = entityStream.toString("utf-8");
         System.out.println(str);
         assertTrue(str.contains("http://orcid.example.com/000-1337"));
-        assertTrue(str.contains("foaf:name>John"));
+        assertTrue(str.contains("foaf:name>John F"));
         assertTrue(str.contains("rdf:about"));
         assertFalse(str.contains("subClassOf"));
     }

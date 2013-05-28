@@ -326,11 +326,13 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
             
         }
 
-        // Links to publications resource
-        UriBuilder builder = uriInfo.getBaseUriBuilder();
-        // CHECK - does this get orcid-pub-web vs. orcid-web etc. wrong?
-        URI worksDetails = builder.path(OrcidApiService.class, "viewWorksDetailsXml").build(orcId);
-        person.addProperty(foafPublications, m.createIndividual(worksDetails.toASCIIString(), null));
+        if (uriInfo != null) {
+            // Links to publications resource
+            UriBuilder builder = uriInfo.getBaseUriBuilder();
+            // CHECK - does this get orcid-pub-web vs. orcid-web etc. wrong?
+            URI worksDetails = builder.path(OrcidApiService.class, "viewWorksDetailsXml").build(orcId);        
+            person.addProperty(foafPublications, m.createIndividual(worksDetails.toASCIIString(), null));
+        }
         
         return account;
     }
