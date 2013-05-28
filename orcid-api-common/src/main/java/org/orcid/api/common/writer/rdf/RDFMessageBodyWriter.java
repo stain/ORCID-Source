@@ -30,6 +30,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.net.URI;
 import java.nio.charset.Charset;
+import java.util.List;
 
 import javax.ws.rs.Produces;
 import javax.ws.rs.WebApplicationException;
@@ -42,12 +43,21 @@ import javax.ws.rs.ext.MessageBodyWriter;
 import javax.ws.rs.ext.Provider;
 
 import org.orcid.api.common.OrcidApiService;
+import org.orcid.jaxb.model.message.Address;
+import org.orcid.jaxb.model.message.Biography;
+import org.orcid.jaxb.model.message.ContactDetails;
+import org.orcid.jaxb.model.message.CreationMethod;
+import org.orcid.jaxb.model.message.Email;
 import org.orcid.jaxb.model.message.ErrorDesc;
+import org.orcid.jaxb.model.message.OrcidBio;
+import org.orcid.jaxb.model.message.OrcidHistory;
 import org.orcid.jaxb.model.message.OrcidMessage;
 import org.orcid.jaxb.model.message.OrcidProfile;
 import org.orcid.jaxb.model.message.PersonalDetails;
 import org.springframework.beans.factory.annotation.Value;
 
+import com.hp.hpl.jena.datatypes.xsd.XSDDatatype;
+import com.hp.hpl.jena.datatypes.xsd.impl.XSDDateTimeType;
 import com.hp.hpl.jena.ontology.DatatypeProperty;
 import com.hp.hpl.jena.ontology.Individual;
 import com.hp.hpl.jena.ontology.ObjectProperty;
@@ -65,6 +75,7 @@ import com.hp.hpl.jena.rdf.model.ModelFactory;
 @Produces( { APPLICATION_RDFXML, TEXT_TURTLE, TEXT_N3 })
 public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
     
+    private static final String MEMBER_API = "https://api.orcid.org/";
     private static final String EN = "en";
     private static final String FOAF_RDF = "foaf.rdf";
     private static final String PAV = "http://purl.org/pav/";
@@ -96,6 +107,21 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
 
     @Context
     private UriInfo uriInfo;
+    private ObjectProperty pavCreatedWith;
+    private ObjectProperty pavCreatedBy;
+    private OntClass provPerson;
+    private OntClass provSoftwareAgent;
+    private OntClass provAgent;
+    private ObjectProperty provWasAttributedTo;
+    private DatatypeProperty provGeneratedAt;
+    private ObjectProperty pavContributedBy;
+    private DatatypeProperty foafMbox;
+    private ObjectProperty foafMaker;
+    private DatatypeProperty foafPlan;
+    private ObjectProperty foafPage;
+    private ObjectProperty foafHomepage;
+    private DatatypeProperty foafBasedNear;
+    private DatatypeProperty pavLastUpdateAt;
 
     
     /**
@@ -231,19 +257,56 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
 
         Individual account = m.createIndividual(orcidProfileUri, foafOnlineAccount);
         person.addProperty(foafAccount, account);
+        Individual webSite = null;
         if (baseUri != null) {
-            account.addProperty(foafAccountServiceHomepage, m.createIndividual(baseUri, null));
+            webSite = m.createIndividual(baseUri, null);
+            account.addProperty(foafAccountServiceHomepage, webSite);
         }
         String orcId = orcidProfile.getOrcid().getValue();
         account.addProperty(foafAccountName, orcId);
         account.addLabel(orcId, null);
-        if (orcidProfile.getOrcidHistory() != null) {
-            if (orcidProfile.getOrcidHistory().isClaimed().booleanValue()) {
-                // Set account as PersonalProfileDocument ?
-                account.addRDFType(foafPersonalProfileDocument);
-            }
-        }
+        
+        // The account as a potential foaf:PersonalProfileDocument
         account.addProperty(foafPrimaryTopic, person);
+        OrcidHistory history = orcidProfile.getOrcidHistory();
+        if (history != null) {
+            if (orcidProfile.getOrcidHistory().isClaimed().booleanValue()) {
+                // Set account as PersonalProfileDocument
+                account.addRDFType(foafPersonalProfileDocument);
+                account.addProperty(foafMaker, person);
+                
+                // If it's claimed,  he's probably done at least some contributions
+                account.addProperty(pavContributedBy, person);
+            }
+            // Who made the profile?
+            switch (history.getCreationMethod()) {
+            case WEBSITE:
+                account.addProperty(pavCreatedBy, person);
+                account.addProperty(provWasAttributedTo, person);                
+                if (webSite != null) {
+                    account.addProperty(pavCreatedWith, webSite);
+                }
+                break;
+            case API:
+                Individual api = m.createIndividual(MEMBER_API, provSoftwareAgent);
+                account.addProperty(pavCreatedWith, api);
+                break;
+            default:
+                // Some unknown agent!
+                account.addProperty(pavCreatedWith, m.createIndividual(null, provAgent));
+            }
+
+            if (history.getLastModifiedDate() != null) {
+                String time = history.getLastModifiedDate().getValue().toXMLFormat();
+                m.createTypedLiteral(time, XSDDatatype.XSDdateTime);
+                account.addLiteral(pavLastUpdateAt, time);
+
+                // Or does this work?
+                account.addLiteral(provGeneratedAt, history.getLastModifiedDate());
+
+            }
+            
+        }
 
         // Links to publications resource
         UriBuilder builder = uriInfo.getBaseUriBuilder();
@@ -257,12 +320,60 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
     private Individual describePerson(OrcidProfile orcidProfile, OntModel m) {
         String orcidUri = orcidProfile.getOrcidId();
         Individual person = m.createIndividual(orcidUri, foafPerson);
+        person.addRDFType(provPerson);
+        
         if (orcidProfile.getOrcidBio() == null) {
             return person;
         }
-        PersonalDetails personalDetails = orcidProfile.getOrcidBio().getPersonalDetails();
-        if (personalDetails == null) {
+        OrcidBio orcidBio = orcidProfile.getOrcidBio();
+        if (orcidBio == null) {
             return person;
+        }
+        
+        describePersonalDetails(orcidBio.getPersonalDetails(), person, m);
+        describeContactDetails(orcidBio.getContactDetails(), person, m);
+        describeBiography(orcidBio.getBiography(), person, m);
+        
+        return person;
+    }
+
+    private void describeBiography(Biography biography, Individual person, OntModel m) {
+        if (biography != null) {
+            // FIXME: Which language is the biography written in? Can't assume EN
+            person.addProperty(foafPlan, biography.getContent());
+       }
+    }
+
+    private void describeContactDetails(ContactDetails contactDetails, Individual person, OntModel m) {
+       if (contactDetails == null) {
+           return;
+       }
+
+       List<Email> emails = contactDetails.getEmail();
+       if (emails != null) {
+           for (Email email : emails) {
+               if (email.isCurrent()) {
+                   person.addProperty(foafMbox, email.getValue());
+               }
+           }
+       }
+       
+       Address addr = contactDetails.getAddress();
+       if (addr != null) {
+           if (addr.getCountry() != null) {
+               String country = addr.getCountry().getContent();
+               // TODO: Add a proper 'country' property
+               Individual position = m.createIndividual(null, null);
+               position.addLabel(country, null);
+               position.addComment("Country code: " + country, EN);
+               person.addProperty(foafBasedNear, position);
+           }
+       }
+    }
+
+    private void describePersonalDetails(PersonalDetails personalDetails, Individual person, OntModel m) {
+        if (personalDetails == null) {
+            return;
         }
         
         if (personalDetails.getCreditName() != null) {
@@ -286,7 +397,6 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
             person.addProperty(foafFamilyName, personalDetails.getFamilyName().getContent());
         }
         
-        return person;
     }
 
     protected OntModel getOntModel() {
@@ -311,7 +421,13 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         if (pav != null) {
             return;
         }
-        OntModel ontModel = loadOntologyFromClasspath(PAV_RDF, PAV);            
+        OntModel ontModel = loadOntologyFromClasspath(PAV_RDF, PAV);         
+        
+        pavCreatedBy = ontModel.getObjectProperty(PAV + "createdBy");
+        pavContributedBy = ontModel.getObjectProperty(PAV + "contributedBy");
+        pavCreatedWith = ontModel.getObjectProperty(PAV + "createdWith");
+        
+        pavLastUpdateAt = ontModel.getDatatypeProperty(PAV + "lastUpdateAt");
         pav = ontModel;            
     }
     
@@ -320,6 +436,12 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
             return;
         }
         OntModel ontModel = loadOntologyFromClasspath(PROV_O_RDF, PROV_O);
+        
+        provPerson =  ontModel.getOntClass(PROV + "Person");
+        provAgent = ontModel.getOntClass(PROV + "Agent");
+        provSoftwareAgent =  ontModel.getOntClass(PROV + "SoftwareAgent");
+        provWasAttributedTo = ontModel.getObjectProperty(PROV + "wasAttributedTo");
+        provGeneratedAt = ontModel.getDatatypeProperty(PROV + "generatedAtTime");
         
         prov = ontModel;
     }
@@ -356,9 +478,15 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         foafGivenName = ontModel.getDatatypeProperty(FOAF_0_1 + "givenName");
         foafFamilyName = ontModel.getDatatypeProperty(FOAF_0_1 + "familyName");
         foafAccountName = ontModel.getDatatypeProperty(FOAF_0_1 + "accountName");
+        foafPlan = ontModel.getDatatypeProperty(FOAF_0_1 + "plan");
+        foafMbox = ontModel.getDatatypeProperty(FOAF_0_1 + "mbox");
+        foafBasedNear = ontModel.getDatatypeProperty(FOAF_0_1 + "based_near");
         
         
         foafPrimaryTopic = ontModel.getObjectProperty(FOAF_0_1 + "primaryTopic");
+        foafMaker = ontModel.getObjectProperty(FOAF_0_1 + "maker");
+        foafPage = ontModel.getObjectProperty(FOAF_0_1 + "page");
+        foafHomepage = ontModel.getObjectProperty(FOAF_0_1 + "homepage");
         foafPublications = ontModel.getObjectProperty(FOAF_0_1 + "publications");
         
         foafAccount = ontModel.getObjectProperty(FOAF_0_1 + "account");
