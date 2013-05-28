@@ -17,23 +17,32 @@
 package org.orcid.api.common.writer.rdf;
 
 import static org.orcid.api.common.OrcidApiConstants.APPLICATION_RDFXML;
+import static org.orcid.api.common.OrcidApiConstants.PROFILE_POST_PATH;
 import static org.orcid.api.common.OrcidApiConstants.TEXT_N3;
 import static org.orcid.api.common.OrcidApiConstants.TEXT_TURTLE;
-import static org.orcid.api.common.OrcidApiConstants.*;
+import static org.orcid.api.common.OrcidApiConstants.WORKS_PATH;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.StringWriter;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
+import java.net.URI;
+import java.nio.charset.Charset;
 
 import javax.ws.rs.Produces;
 import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedMap;
+import javax.ws.rs.core.UriBuilder;
+import javax.ws.rs.core.UriInfo;
 import javax.ws.rs.ext.MessageBodyWriter;
 import javax.ws.rs.ext.Provider;
 
+import org.orcid.api.common.OrcidApiService;
+import org.orcid.jaxb.model.message.ErrorDesc;
 import org.orcid.jaxb.model.message.OrcidMessage;
 import org.orcid.jaxb.model.message.OrcidProfile;
 import org.orcid.jaxb.model.message.PersonalDetails;
@@ -56,6 +65,7 @@ import com.hp.hpl.jena.rdf.model.ModelFactory;
 @Produces( { APPLICATION_RDFXML, TEXT_TURTLE, TEXT_N3 })
 public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
     
+    private static final String EN = "en";
     private static final String FOAF_RDF = "foaf.rdf";
     private static final String PAV = "http://purl.org/pav/";
     private static final String PAV_RDF = "pav.rdf";
@@ -63,7 +73,9 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
     private static final String PROV = "http://www.w3.org/prov#";
     private static final String PROV_O = "http://www.w3.org/prov-o#";
     private static final String FOAF_0_1 = "http://xmlns.com/foaf/0.1/";
-
+    protected static final String TMP_BASE = "app://614879b4-48c3-45ab-a828-2a72e43f80d9/";
+    private static final Charset UTF8 = Charset.forName("UTF-8");
+    
     private DatatypeProperty foafName;
     private DatatypeProperty foafGivenName;
     private DatatypeProperty foafFamilyName;
@@ -76,11 +88,16 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
     private String baseUri = "http://orcid.org";
     private DatatypeProperty foafAccountName;
     private ObjectProperty foafPrimaryTopic;
+    private ObjectProperty foafPublications;
     private OntClass foafPersonalProfileDocument;
     private OntModel prov;
     private OntModel foaf;
     private OntModel pav;
 
+    @Context
+    private UriInfo uriInfo;
+
+    
     /**
      * Ascertain if the MessageBodyWriter supports a particular type.
      * 
@@ -170,23 +187,42 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         OutputStream entityStream) throws IOException, WebApplicationException {
 
         OntModel m = getOntModel();
+
+        if (xml.getErrorDesc() != null) {
+            describeError(xml.getErrorDesc(), m);
+        }
         
         OrcidProfile orcidProfile = xml.getOrcidProfile();
-        
+        System.out.println(httpHeaders);
         if (orcidProfile != null) {        
             Individual person = describePerson(orcidProfile, m);        
             if (person != null) {
                 Individual account = describeAccount(orcidProfile, m, person);
             }
         }
-        
         MediaType rdfXml = new MediaType("application", "rdf+xml");
         if (mediaType.isCompatible(rdfXml)) {
-            m.write(entityStream); 
+            m.write(entityStream, "RDF/XML", TMP_BASE); 
         } else {
-            // Must be Turtle or N3 then?
-            m.write(entityStream, "N3");
+            // Silly workaround to generate relative URIs 
+
+
+            // The below would not correctly relativize according to TMP_BASE
+            // https://issues.apache.org/jira/browse/JENA-132 
+            // m.write(entityStream, "N3", TMP_BASE);
+
+            StringWriter writer = new StringWriter();
+            m.write(writer, "N3", TMP_BASE);
+            String relativizedTurtle = writer.toString().replace(TMP_BASE, "");            
+            entityStream.write(relativizedTurtle.getBytes(UTF8));           
         } 
+    }
+
+    protected void describeError(ErrorDesc errorDesc, OntModel m) {
+        String error = errorDesc.getContent();
+        Individual root = m.createIndividual(TMP_BASE, null);
+        root.setLabel("Error", EN);
+        root.setComment(error, EN);
     }
 
     private Individual describeAccount(OrcidProfile orcidProfile, OntModel m, Individual person) {
@@ -198,7 +234,9 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         if (baseUri != null) {
             account.addProperty(foafAccountServiceHomepage, m.createIndividual(baseUri, null));
         }
-        account.addProperty(foafAccountName, orcidProfile.getOrcid().getValue());
+        String orcId = orcidProfile.getOrcid().getValue();
+        account.addProperty(foafAccountName, orcId);
+        account.addLabel(orcId, null);
         if (orcidProfile.getOrcidHistory() != null) {
             if (orcidProfile.getOrcidHistory().isClaimed().booleanValue()) {
                 // Set account as PersonalProfileDocument ?
@@ -206,6 +244,13 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
             }
         }
         account.addProperty(foafPrimaryTopic, person);
+
+        // Links to publications resource
+        UriBuilder builder = uriInfo.getBaseUriBuilder();
+        // CHECK - does this get orcid-pub-web vs. orcid-web etc. wrong?
+        URI worksDetails = builder.path(OrcidApiService.class, "viewWorksDetailsHtml").build(orcId);
+        person.addProperty(foafPublications, m.createIndividual(worksDetails.toASCIIString(), null));
+        
         return account;
     }
 
@@ -221,9 +266,17 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         }
         
         if (personalDetails.getCreditName() != null) {
-            person.addProperty(foafName, personalDetails.getCreditName().getContent());
-        } else {
-            // TODO: Should we generate a foafName assuming first/last order?
+            String creditName = personalDetails.getCreditName().getContent();
+            person.addProperty(foafName, creditName);
+            person.addLabel(creditName, null);
+        } else if (personalDetails.getGivenNames() != null && personalDetails.getFamilyName() != null ){
+            // Naive combination assuming givenNames ~= first name and familyName ~= lastName
+            // See http://www.w3.org/International/questions/qa-personal-names for further
+            // considerations -- we don't report this as foaf:name as we can't be sure
+            // NOTE: ORCID gui is westernized asking for "First name" and
+            // "Last name" and assuming the above mapping
+            String label = personalDetails.getGivenNames() + " "  + personalDetails.getFamilyName();
+            person.addLabel(label, null);
         }
         
         if (personalDetails.getGivenNames() != null) {
@@ -232,6 +285,7 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         if (personalDetails.getFamilyName() != null) {
             person.addProperty(foafFamilyName, personalDetails.getFamilyName().getContent());
         }
+        
         return person;
     }
 
@@ -305,10 +359,19 @@ public class RDFMessageBodyWriter implements MessageBodyWriter<OrcidMessage> {
         
         
         foafPrimaryTopic = ontModel.getObjectProperty(FOAF_0_1 + "primaryTopic");
+        foafPublications = ontModel.getObjectProperty(FOAF_0_1 + "publications");
         
         foafAccount = ontModel.getObjectProperty(FOAF_0_1 + "account");
         foafAccountServiceHomepage = ontModel.getObjectProperty(FOAF_0_1 + "accountServiceHomepage");
 
         foaf = ontModel;            
+    }
+
+    public UriInfo getUriInfo() {
+        return uriInfo;
+    }
+
+    public void setUriInfo(UriInfo uriInfo) {
+        this.uriInfo = uriInfo;
     }
 }
